@@ -41,15 +41,27 @@ async fn register(State(state): State<MyState>, Json(payload): Json<User>) -> Js
         .one(&state.db)
         .await.expect("couldnt find user");
     
-    match(person)
+    match person
     {
         Some(d) => {
                 return Json(json!({"response": 409 ,"data": "exists"}));
             },
         None => {
-            return Json(json!({"data": "dont exists"}));
+                let user = users::ActiveModel{
+                    id: NotSet,
+                    username: Set(payload.username),
+                    password: Set(payload.password),
+                    jwt_exp: Set(None)
+                };
+                let user = user.insert(&state.db)
+                .await
+                .expect("failed to create user");
+
+                return Json(json!({"response": 200, "data": "created user"}));
+
             }
     }
 
    
 }
+
