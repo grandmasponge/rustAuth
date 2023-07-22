@@ -88,6 +88,7 @@ async fn register(State(state): State<MyState>, Json(payload): Json<User>) -> (S
 }
 
 async fn login(State(state): State<MyState>, Json(payload): Json<User>) -> (StatusCode, Json<JsonValue>) {
+
     let user = m_user::find()
                 .filter(
                     users::Column::Username.contains(&payload.username)
@@ -95,17 +96,33 @@ async fn login(State(state): State<MyState>, Json(payload): Json<User>) -> (Stat
                 .one(&state.db)
                 .await
                 .expect("failed to retrive from db");
+
     match user {
         Some(cl) => {
                 if &cl.password == &payload.password {
                     todo!()
                 }
                 else {
-                    (StatusCode::UNAUTHORIZED, Json(json!({"data": "tut tut tut"})))
+                    (StatusCode::UNAUTHORIZED,
+                         Json(
+                            json!(
+                                {
+                                    "data": "tut tut tut"
+                                }
+                            )
+                        )
+                    )
                 }
         },
         None => {
-            (StatusCode::UNAUTHORIZED, Json(json!({"data": "tut tut tut"})))
+            (StatusCode::UNAUTHORIZED, Json(
+                json!(
+                    {
+                        "data": "tut tut tut"
+                    }
+                )
+            )
+        )
         }
     }           
 }
