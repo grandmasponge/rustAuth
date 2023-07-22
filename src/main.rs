@@ -53,5 +53,3 @@ async fn register(State(state): State<MyState>, Json(payload): Json<User>) -> Js
 
    
 }
-
-
