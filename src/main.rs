@@ -1,10 +1,12 @@
 use axum::extract::{Json, State};
-use axum::http::{header, HeaderMap};
+use axum::http::{header, HeaderMap, Response, HeaderValue};
+use axum::response::IntoResponse;
 use axum::{
     http::StatusCode,
     routing::{get, post},
     Router,
 };
+use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
 use chrono::{prelude::*, Duration};
 use dotenv::dotenv;
 use jsonwebtoken::{encode, EncodingKey, Header};
@@ -101,7 +103,7 @@ async fn register(
 async fn login(
     State(state): State<MyState>,
     Json(payload): Json<User>,
-) -> (StatusCode, Json<JsonValue>) {
+) -> Result<HeaderMap, (StatusCode, Json<JsonValue>)>{
     let user = m_user::find()
         .filter(users::Column::Username.contains(&payload.username))
         .one(&state.db)
@@ -123,29 +125,35 @@ async fn login(
                     &EncodingKey::from_secret(state.token.as_bytes()),
                 )
                 .expect("failed to create token");
-                return (
-                    StatusCode::ACCEPTED,
-                    Json(json!({"yay:":"yay", "token" : token})),
-                );
+                let cookie = Cookie::build("token", token.to_owned())
+                    .path("/")
+                    .http_only(true)
+                    .same_site(SameSite::Lax)
+                    .finish();
+                println!("{:?}", cookie);
+                let mut headers = HeaderMap::new();
+                headers.insert(header::SET_COOKIE, cookie.to_string().parse().unwrap());
+                println!("{:?}", headers);
+                Ok(headers)
             } else {
-                (
+                Err((
                     StatusCode::UNAUTHORIZED,
                     Json(json!(
                         {
                             "data": "tut tut tut"
                         }
                     )),
-                )
+                ))
             }
         }
-        None => (
+        None => Err((
             StatusCode::UNAUTHORIZED,
             Json(json!(
                 {
                     "data": "tut tut tut"
                 }
             )),
-        ),
+        )),
     }
 }
 

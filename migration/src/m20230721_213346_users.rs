@@ -6,36 +6,24 @@ pub struct Migration;
 #[async_trait::async_trait]
 impl MigrationTrait for Migration {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-            manager
-            .create_table(  
-            Table::create()     
-            .table(Users::Table)     
-            .if_not_exists()
-            .col(
-                ColumnDef::new(Users::Id)
-                .integer()
-                .not_null()
-                .primary_key()
-                .auto_increment()
+        manager
+            .create_table(
+                Table::create()
+                    .table(Users::Table)
+                    .if_not_exists()
+                    .col(
+                        ColumnDef::new(Users::Id)
+                            .integer()
+                            .not_null()
+                            .primary_key()
+                            .auto_increment(),
+                    )
+                    .col(ColumnDef::new(Users::Username).string().not_null())
+                    .col(ColumnDef::new(Users::Password).string().not_null())
+                    .col(ColumnDef::new(Users::JwtExp).integer().null())
+                    .to_owned(),
             )
-            .col(
-                ColumnDef::new(Users::Username)
-                .string()
-                .not_null()
-            )
-            .col(
-                ColumnDef::new(Users::Password)
-                .string()
-                .not_null()
-            )
-            .col(
-                ColumnDef::new(Users::JwtExp)
-                .integer()
-                .null()
-                
-            )
-            .to_owned()
-        ) .await
+            .await
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
