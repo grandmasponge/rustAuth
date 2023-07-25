@@ -42,13 +42,16 @@ struct Claims {
 async fn main() {
     dotenv().ok();
     let secret = std::env::var("SECRET").expect("failed to load env variable");
+    //will arc at later stage 
     let state = MyState {
+        //database connection in a state due to not wating to constantly connect to the database would be rather inefficent if constantly done
         db: Database::connect("mysql://root@localhost:3306/auth")
             .await
             .expect("failed to connect to db"),
         token: secret,
+        //look in .env for secret remeber to change the secret when implimenting this 
     };
-
+    //adding routes to the app pretty simple stuffs
     let app = Router::new()
         .route("/register", post(register))
         .route("/login", post(login))
@@ -60,7 +63,7 @@ async fn main() {
         .await
         .unwrap();
 }
-
+//registering the user
 async fn register(
     State(state): State<MyState>,
     Json(payload): Json<User>,
@@ -70,9 +73,9 @@ async fn register(
         .one(&state.db)
         .await
         .expect("couldnt find user");
-
+    //precense validation for registering the user cant have 2 users with the same details
     match person {
-        Some(d) => (
+        Some(_) => (
             StatusCode::NOT_ACCEPTABLE,
             Json(json!(
                 {"response": 409,
@@ -100,7 +103,7 @@ async fn register(
         }
     }
 }
-
+//the only function in this project that is somewhat been error handled
 async fn login(
     State(state): State<MyState>,
     Json(payload): Json<User>,
@@ -110,13 +113,14 @@ async fn login(
         .one(&state.db)
         .await
         .expect("failed to retrive from db");
-
+//checking user info for logging in
     match user {
         Some(mut cl) => {
             if &cl.password == &payload.password {
                 let iat = Utc::now().timestamp() as usize;
                 let expt = Utc::now() + Duration::hours(1);
                 let uid = cl.id;
+                //setting up the claims aka what data is in the jwt
                 let claims = Claims {
                     exp: expt.timestamp() as usize,
                     iat: iat,
@@ -128,11 +132,13 @@ async fn login(
                     &EncodingKey::from_secret(state.token.as_bytes()),
                 )
                 .expect("failed to create token");
+            //creating the cookie
                 let cookie = Cookie::build("token", token.to_owned())
                     .path("/")
                     .http_only(true)
                     .same_site(SameSite::Lax)
                     .finish();
+                //inserting cookie into headers 
                 let mut headers = HeaderMap::new();
                 headers.insert(header::SET_COOKIE, cookie.to_string().parse().unwrap());
                 Ok(headers)
@@ -157,7 +163,7 @@ async fn login(
         )),
     }
 }
-
+//todo! but for now juss checks if there is a cookie.
 async fn auth(jar: CookieJar) {
     if let Some(token) = jar.get("token")
     {
