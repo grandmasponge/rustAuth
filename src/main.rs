@@ -1,5 +1,5 @@
 use axum::extract::{Json, State};
-use axum::http::{header, HeaderMap, Response, HeaderValue};
+use axum::http::{header, HeaderMap, HeaderValue, Response};
 use axum::response::IntoResponse;
 use axum::{
     http::StatusCode,
@@ -35,6 +35,7 @@ struct MyState {
 struct Claims {
     exp: usize,
     iat: usize,
+    uid: i32
 }
 
 #[tokio::main]
@@ -103,7 +104,7 @@ async fn register(
 async fn login(
     State(state): State<MyState>,
     Json(payload): Json<User>,
-) -> Result<HeaderMap, (StatusCode, Json<JsonValue>)>{
+) -> Result<HeaderMap, (StatusCode, Json<JsonValue>)> {
     let user = m_user::find()
         .filter(users::Column::Username.contains(&payload.username))
         .one(&state.db)
@@ -111,13 +112,15 @@ async fn login(
         .expect("failed to retrive from db");
 
     match user {
-        Some(cl) => {
+        Some(mut cl) => {
             if &cl.password == &payload.password {
                 let iat = Utc::now().timestamp() as usize;
                 let expt = Utc::now() + Duration::hours(1);
+                let uid = cl.id;
                 let claims = Claims {
                     exp: expt.timestamp() as usize,
                     iat: iat,
+                    uid: uid
                 };
                 let token = encode(
                     &Header::default(),
@@ -130,10 +133,8 @@ async fn login(
                     .http_only(true)
                     .same_site(SameSite::Lax)
                     .finish();
-                println!("{:?}", cookie);
                 let mut headers = HeaderMap::new();
                 headers.insert(header::SET_COOKIE, cookie.to_string().parse().unwrap());
-                println!("{:?}", headers);
                 Ok(headers)
             } else {
                 Err((
@@ -157,4 +158,12 @@ async fn login(
     }
 }
 
-async fn auth(header: HeaderMap) {}
+async fn auth(jar: CookieJar) {
+    if let Some(token) = jar.get("token")
+    {
+        println!("{:?}", token.value());
+    }
+    else {
+        println!("no token found");
+    }
+}

@@ -20,7 +20,6 @@ impl MigrationTrait for Migration {
                     )
                     .col(ColumnDef::new(Users::Username).string().not_null())
                     .col(ColumnDef::new(Users::Password).string().not_null())
-                    .col(ColumnDef::new(Users::JwtExp).integer().null())
                     .to_owned(),
             )
             .await
@@ -37,7 +36,6 @@ impl MigrationTrait for Migration {
 #[derive(Iden)]
 enum Users {
     Table,
-    JwtExp,
     Id,
     Username,
     Password,
