@@ -18,7 +18,7 @@ impl MigrationTrait for Migration {
                             .primary_key()
                             .auto_increment(),
                     )
-                    .col(ColumnDef::new(Users::Username).string().not_null())
+                    .col(ColumnDef::new(Users::Username).string().unique_key())
                     .col(ColumnDef::new(Users::Password).string().not_null())
                     .to_owned(),
             )

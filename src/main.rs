@@ -1,7 +1,6 @@
-use axum::extract::{Json, State};
-use axum::http::{header, HeaderMap, HeaderValue, Response};
-use axum::response::IntoResponse;
+use axum::http::{header, HeaderMap};
 use axum::{
+    extract::{Json, State},
     http::StatusCode,
     routing::{get, post},
     Router,
@@ -9,7 +8,7 @@ use axum::{
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
 use chrono::{prelude::*, Duration};
 use dotenv::dotenv;
-use jsonwebtoken::{encode, EncodingKey, Header};
+use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use myent::users;
 use myent::users::Entity as m_user;
 use sea_orm::ActiveValue::{NotSet, Set};
@@ -35,21 +34,21 @@ struct MyState {
 struct Claims {
     exp: usize,
     iat: usize,
-    uid: i32
+    uid: i32,
 }
 
 #[tokio::main]
 async fn main() {
     dotenv().ok();
     let secret = std::env::var("SECRET").expect("failed to load env variable");
-    //will arc at later stage 
+    //will arc at later stage
     let state = MyState {
         //database connection in a state due to not wating to constantly connect to the database would be rather inefficent if constantly done
         db: Database::connect("mysql://root@localhost:3306/auth")
             .await
             .expect("failed to connect to db"),
         token: secret,
-        //look in .env for secret remeber to change the secret when implimenting this 
+        //look in .env for secret remeber to change the secret when implimenting this
     };
     //adding routes to the app pretty simple stuffs
     let app = Router::new()
@@ -87,9 +86,8 @@ async fn register(
                 id: NotSet,
                 username: Set(payload.username),
                 password: Set(payload.password),
-                jwt_exp: Set(None),
             };
-            let user = user.insert(&state.db).await.expect("failed to create user");
+            let _user = user.insert(&state.db).await.expect("failed to create user");
 
             (
                 StatusCode::CREATED,
@@ -109,22 +107,23 @@ async fn login(
     Json(payload): Json<User>,
 ) -> Result<HeaderMap, (StatusCode, Json<JsonValue>)> {
     let user = m_user::find()
-        .filter(users::Column::Username.contains(&payload.username))
+        .filter(users::Column::Username.eq(&payload.username))
         .one(&state.db)
         .await
         .expect("failed to retrive from db");
-//checking user info for logging in
+    //checking user info for logging in
     match user {
-        Some(mut cl) => {
-            if &cl.password == &payload.password {
+        Some(cl) => {
+            println!("{:?}", cl);
+            if cl.password == payload.password {
                 let iat = Utc::now().timestamp() as usize;
-                let expt = Utc::now() + Duration::hours(1);
+                let expt = Utc::now() + Duration::minutes(1);
                 let uid = cl.id;
                 //setting up the claims aka what data is in the jwt
                 let claims = Claims {
                     exp: expt.timestamp() as usize,
                     iat: iat,
-                    uid: uid
+                    uid: uid,
                 };
                 let token = encode(
                     &Header::default(),
@@ -132,13 +131,13 @@ async fn login(
                     &EncodingKey::from_secret(state.token.as_bytes()),
                 )
                 .expect("failed to create token");
-            //creating the cookie
+                //creating the cookie
                 let cookie = Cookie::build("token", token.to_owned())
                     .path("/")
                     .http_only(true)
                     .same_site(SameSite::Lax)
                     .finish();
-                //inserting cookie into headers 
+                //inserting cookie into headers
                 let mut headers = HeaderMap::new();
                 headers.insert(header::SET_COOKIE, cookie.to_string().parse().unwrap());
                 Ok(headers)
@@ -164,12 +163,21 @@ async fn login(
     }
 }
 //todo! but for now juss checks if there is a cookie.
-async fn auth(jar: CookieJar) {
-    if let Some(token) = jar.get("token")
-    {
-        println!("{:?}", token.value());
-    }
-    else {
+async fn auth(jar: CookieJar, State(state): State<MyState>) {
+    if let Some(cookie) = jar.get("token") {
+        let token = decode::<Claims>(
+            cookie.value(),
+            &DecodingKey::from_secret(state.token.as_bytes()),
+            &Validation::default(),
+        )
+        .map_err(|error| match error.kind() {
+            jsonwebtoken::errors::ErrorKind::InvalidToken
+            | jsonwebtoken::errors::ErrorKind::InvalidSignature
+            | jsonwebtoken::errors::ErrorKind::ExpiredSignature => println!("unauthed"),
+            _ => println!("also unauthed")
+        });
+        println!("{:?}", token);
+    } else {
         println!("no token found");
     }
 }
