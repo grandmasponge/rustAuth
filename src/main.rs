@@ -164,7 +164,7 @@ async fn login(
 }
 //todo! but for now juss checks if there is a cookie.
 async fn auth(jar: CookieJar, State(state): State<MyState>) {
-    if let Some(cookie) = jar.get("token").expect("failed to grab cookie from jar") {
+    if let Some(cookie) = jar.get("token") {
         let token = decode::<Claims>(
             cookie.value(),
             &DecodingKey::from_secret(state.token.as_bytes()),
