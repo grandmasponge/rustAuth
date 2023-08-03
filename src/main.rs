@@ -1,4 +1,5 @@
 use axum::http::{header, HeaderMap};
+use axum::response::IntoResponse;
 use axum::{
     extract::{Json, State},
     http::StatusCode,
@@ -11,6 +12,7 @@ use dotenv::dotenv;
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use myent::users;
 use myent::users::Entity as m_user;
+use sea_orm::error::DbErr;
 use sea_orm::ActiveValue::{NotSet, Set};
 use sea_orm::{
     sea_query::tests_cfg::json, ActiveModelTrait, ColumnTrait, Database, DatabaseConnection,
@@ -46,7 +48,7 @@ async fn main() {
         //database connection in a state due to not wating to constantly connect to the database would be rather inefficent if constantly done
         db: Database::connect("mysql://root@localhost:3306/auth")
             .await
-            .expect("failed to connect to db"),
+            .expect("failed to connect to the database"),
         token: secret,
         //look in .env for secret remeber to change the secret when implimenting this
     };
@@ -66,22 +68,24 @@ async fn main() {
 async fn register(
     State(state): State<MyState>,
     Json(payload): Json<User>,
-) -> (StatusCode, Json<JsonValue>) {
+) -> Result<impl IntoResponse, (StatusCode, Json<JsonValue>)> {
     let person = m_user::find()
         .filter(users::Column::Username.contains(&payload.username))
         .one(&state.db)
         .await
-        .expect("couldnt find user");
+        .map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"status":"fail"})),
+            )
+        });
     //precense validation for registering the user cant have 2 users with the same details
     match person {
-        Some(_) => (
+        Ok(Some(_)) => Ok((
             StatusCode::NOT_ACCEPTABLE,
-            Json(json!(
-                {"response": 409,
-                 "data": "exists"}
-            )),
-        ),
-        None => {
+            Json(json!({"message":"user already exists"})),
+        )),
+        Ok(None) => Ok({
             let user = users::ActiveModel {
                 id: NotSet,
                 username: Set(payload.username),
@@ -98,7 +102,8 @@ async fn register(
                     }
                 )),
             )
-        }
+        }),
+        Err(_) => unreachable!(),
     }
 }
 //the only function in this project that is somewhat been error handled
@@ -174,7 +179,7 @@ async fn auth(jar: CookieJar, State(state): State<MyState>) {
             jsonwebtoken::errors::ErrorKind::InvalidToken
             | jsonwebtoken::errors::ErrorKind::InvalidSignature
             | jsonwebtoken::errors::ErrorKind::ExpiredSignature => println!("unauthed"),
-            _ => println!("also unauthed")
+            _ => println!("also unauthed"),
         });
         println!("{:?}", token);
     } else {
