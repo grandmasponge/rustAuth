@@ -146,7 +146,12 @@ async fn login(
                     &claims,
                     &EncodingKey::from_secret(state.token.as_bytes()),
                 )
-                .expect("failed to create token");
+                .map_err(|_| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(json!({"status":"failed"})),
+                    )
+                });
                 //creating the cookie
                 let cookie = Cookie::build("token", token.to_owned())
                     .path("/")
@@ -155,7 +160,10 @@ async fn login(
                     .finish();
                 //inserting cookie into headers
                 let mut headers = HeaderMap::new();
-                headers.insert(header::SET_COOKIE, cookie.to_string().parse().unwrap());
+                headers.insert(
+                    header::SET_COOKIE,
+                    cookie.to_string().parse().expect("failed"),
+                );
                 Ok(headers)
             } else {
                 Err((
