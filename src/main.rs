@@ -146,8 +146,9 @@ async fn login(
                     &Header::default(),
                     &claims,
                     &EncodingKey::from_secret(state.token.as_bytes()),
-                ).expect("failed to create token");
-        
+                )
+                .expect("failed to create token");
+
                 //creating the cookie
                 let cookie = Cookie::build("token", token)
                     .path("/")
@@ -180,9 +181,12 @@ async fn login(
     }
 }
 //todo! but for now juss checks if there is a cookie.
-async fn auth(jar: CookieJar, State(state): State<Arc<MyState>>) {
+async fn auth(
+    jar: CookieJar,
+    State(state): State<Arc<MyState>>,
+) -> Result<impl IntoResponse, (StatusCode, Json<JsonValue>)> {
     if let Some(cookie) = jar.get("token") {
-        let token = decode::<Claims>(
+        let claims = decode::<Claims>(
             cookie.value(),
             &DecodingKey::from_secret(state.token.as_bytes()),
             &Validation::default(),
@@ -190,11 +194,19 @@ async fn auth(jar: CookieJar, State(state): State<Arc<MyState>>) {
         .map_err(|error| match error.kind() {
             jsonwebtoken::errors::ErrorKind::InvalidToken
             | jsonwebtoken::errors::ErrorKind::InvalidSignature
-            | jsonwebtoken::errors::ErrorKind::ExpiredSignature => println!("unauthed"),
-            _ => println!("also unauthed"),
+            | jsonwebtoken::errors::ErrorKind::ExpiredSignature => {
+                (StatusCode::BAD_REQUEST, Json(json!({"status":"hehe"})))
+            }
+            _ => (StatusCode::BAD_REQUEST, Json(json!({"status":"hehe"}))),
         });
-        println!("{:?}", token);
+        let tehe = match claims {
+            Ok(data) => data,
+            Err(e) => return Err((StatusCode::BAD_REQUEST, Json(json!({"status":"hehe"})))),
+        };
+        let id = tehe.claims.uid;
+
+        Ok(Json(json!({"tehe":"tehe"})))
     } else {
-        println!("no token found");
+        Ok(Json(json!({"tehe":"tehe"})))
     }
 }
