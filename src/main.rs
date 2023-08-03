@@ -91,7 +91,9 @@ async fn register(
                 username: Set(payload.username),
                 password: Set(payload.password),
             };
-            let _user = user.insert(&state.db).await.expect("failed to create user");
+            let _user = user.insert(&state.db).await.map_err(|_| {
+                (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"status":"failed to create user"})))
+            });
 
             (
                 StatusCode::CREATED,
