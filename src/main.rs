@@ -114,6 +114,7 @@ async fn register(
 }
 //the only function in this project that is somewhat been error handled
 async fn login(
+    jar: CookieJar,
     State(state): State<Arc<MyState>>,
     Json(payload): Json<User>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<JsonValue>)> {
@@ -130,7 +131,6 @@ async fn login(
     //checking user info for logging in
     match user {
         Ok(Some(cl)) => {
-            println!("{:?}", cl);
             if cl.password == payload.password {
                 let iat = Utc::now().timestamp() as usize;
                 let expt = Utc::now() + Duration::minutes(1);
@@ -141,30 +141,22 @@ async fn login(
                     iat: iat,
                     uid: uid,
                 };
+
                 let token = encode(
                     &Header::default(),
                     &claims,
                     &EncodingKey::from_secret(state.token.as_bytes()),
-                )
-                .map_err(|_| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(json!({"status":"failed"})),
-                    )
-                });
+                ).expect("failed to create token");
+        
                 //creating the cookie
-                let cookie = Cookie::build("token", token.to_owned())
+                let cookie = Cookie::build("token", token)
                     .path("/")
                     .http_only(true)
                     .same_site(SameSite::Lax)
                     .finish();
-                //inserting cookie into headers
-                let mut headers = HeaderMap::new();
-                headers.insert(
-                    header::SET_COOKIE,
-                    cookie.to_string().parse().expect("failed"),
-                );
-                Ok(headers)
+                //inserting cookie into cookiejar
+                let cookiejar = CookieJar::add(jar, cookie);
+                Ok((StatusCode::ACCEPTED, cookiejar))
             } else {
                 Err((
                     StatusCode::UNAUTHORIZED,
